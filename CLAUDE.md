@@ -9,22 +9,24 @@ QA with citations, and a deviation-detection pipeline. Frontend scaffolded in We
 
 ## Current state
 
-**Phase: Week 4 complete** (as of 2026-05-24)
+**Phase: Week 5 complete** (as of 2026-05-24)
 
 All 5 pre-Week-1 validation spikes are done (see `docs/spikes/`).
 Week 1: parse → chunk → embed → store pipeline.
 Week 2: retrieval (RRF), rerank (Cohere), extraction (12 CUAD categories), risk flags.
 Week 3: QA endpoint with citation grounding, eval harness + JSONL store, evals API, Next.js frontend.
 Week 4: playbook YAML loader (Pydantic v2 schema), /evals/experiments endpoint, TabExperiments frontend.
+Week 5: LangGraph deviation pipeline (5-node), deviation_runs DB table + migration, POST /deviation/run + GET /deviation/runs/{id}.
 
 ### What's built and working
 
 | Module | Location | Status |
 |--------|----------|--------|
 | Config | `backend/app/config.py` | ✅ pydantic-settings, all env vars + `evals_results_dir`, `playbooks_dir` |
-| DB models | `backend/app/db/models.py` | ✅ Contract, Chunk (pgvector + JSONB bbox) |
+| DB models | `backend/app/db/models.py` | ✅ Contract, Chunk, DeviationRun (pgvector + JSONB) |
 | DB session | `backend/app/db/session.py` | ✅ SQLAlchemy async, asyncpg |
 | Migration | `backend/migrations/versions/0001_initial_schema.py` | ✅ tables + ivfflat + bm25 indexes |
+| Migration | `backend/migrations/versions/0002_deviation_runs.py` | ✅ deviation_runs table + indexes |
 | Parsing | `backend/app/parsing/__init__.py` | ✅ PyMuPDF block extraction + bbox |
 | Chunking | `backend/app/chunking/__init__.py` | ✅ dual granularity (section 1500t, clause 300t) |
 | Embeddings | `backend/app/embeddings/__init__.py` | ✅ Voyage AI, batched, tenacity retry |
@@ -47,11 +49,12 @@ Week 4: playbook YAML loader (Pydantic v2 schema), /evals/experiments endpoint, 
 | Playbook YAMLs | `data/playbooks/yaml/`, `evals/playbooks/yaml/` | ✅ prod sample + eval fixture |
 | Frontend | `frontend/` | ✅ Next.js 16 + TanStack Query + Recharts + shadcn/ui |
 | TabExperiments | `frontend/src/components/evals/TabExperiments.tsx` | ✅ line chart + run table with deltas |
+| Deviation pipeline | `backend/app/deviation/__init__.py` | ✅ 5-node LangGraph: Loader→Classifier→Comparator→Scorer→Summarizer |
+| Deviation API | `backend/app/api/deviation.py` | ✅ POST /run, GET /runs/{id}; HITL stub (Week 6) |
 
 ### What's still a stub (raises NotImplementedError)
 
-- `app/api/deviation.py` — Week 5–6
-- `app/deviation/` — Week 5
+- `POST /api/deviation/{run_id}/review` — Week 6 HITL interrupt
 
 ### Frontend routes
 
@@ -181,6 +184,6 @@ Baseline: CUAD paper RoBERTa-large F1 (see `docs/spikes/spike-3-contracteval-ove
 | W1 | ✅ parsing, chunking, DB, LLM client, Langfuse, contracts API |
 | W2 | ✅ retrieval (RRF query), rerank (Cohere), extraction (12 categories), risk flags |
 | W3 | ✅ QA endpoint, citations, eval harness, eval frontend |
-| W4 | playbook YAML loader, experiment tracking |
-| W5 | LangGraph deviation pipeline (5-node) |
+| W4 | ✅ playbook YAML loader, experiment tracking |
+| W5 | ✅ LangGraph deviation pipeline (5-node), deviation_runs table, POST /deviation/run |
 | W6 | HITL interrupt, eval CI gate (`mean − 1·stddev`) |

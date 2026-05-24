@@ -71,3 +71,40 @@ class Chunk(Base):
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
 
     contract: Mapped["Contract"] = relationship("Contract", back_populates="chunks")
+
+
+class DeviationRunStatus(enum.StrEnum):
+    pending = "pending"
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+
+
+class DeviationRun(Base):
+    __tablename__ = "deviation_runs"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    contract_id: Mapped[str] = mapped_column(
+        String, ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False
+    )
+    playbook_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[DeviationRunStatus] = mapped_column(
+        SAEnum(DeviationRunStatus, name="deviationrunstatus"),
+        nullable=False,
+        default=DeviationRunStatus.pending,
+    )
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
