@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: paradedb/paradedb:latest
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-clauseline}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clauseline}
+      POSTGRES_DB: ${POSTGRES_DB:-clauseline}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - paradedb_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clauseline} -d ${POSTGRES_DB:-clauseline}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  # Langfuse self-hosted — optional, cloud is the default (see .env.example).
+  # Uncomment and configure if you want local observability without a cloud account.
+  # See https://langfuse.com/docs/deployment/self-host for the full compose snippet.
+
+volumes:
+  paradedb_data:

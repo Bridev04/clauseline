@@ -1,0 +1,73 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+
+# uv
+uv.lock
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Node / Next.js
+node_modules/
+.next/
+.turbo/
+out/
+.pnpm-store/
+
+# IDE
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Data — keep dirs, ignore content
+data/contracts/*
+!data/contracts/.gitkeep
+data/playbooks/yaml/*
+!data/playbooks/yaml/.gitkeep
+
+# Eval artifacts — keep baseline, ignore run outputs
+evals/results/*.json
+!evals/results/.gitkeep
+evals/annotations/*
+!evals/annotations/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# Docker volumes
+docker/volumes/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
