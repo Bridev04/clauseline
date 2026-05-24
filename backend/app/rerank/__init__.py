@@ -7,3 +7,74 @@ of the Cohere API (see docs/decision-log.md: "Cohere rerank vs local cross-encod
 
 Implemented: Week 2.
 """
+import structlog
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+from app.config import Settings, get_settings
+from app.db.models import Chunk
+from app.retrieval import RetrievalResult
+
+log = structlog.get_logger(__name__)
+
+
+class RerankClient:
+    def __init__(self, settings: Settings) -> None:
+        import cohere  # imported here so the module loads without the key present
+
+        self._client = cohere.AsyncClientV2(api_key=settings.cohere_api_key)
+        self._model = settings.cohere_rerank_model
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
+    async def rerank(
+        self,
+        query: str,
+        candidates: list[RetrievalResult],
+        *,
+        top_k: int,
+    ) -> list[Chunk]:
+        """Rerank candidates by semantic relevance and return the top-k chunks.
+
+        Documents are passed as plain strings (chunk content). The returned list
+        is ordered by Cohere relevance score descending.
+        """
+        if not candidates:
+            return []
+
+        # Cohere expects documents as strings or dicts; plain strings are fine.
+        documents = [r.chunk.content for r in candidates]
+
+        response = await self._client.rerank(
+            model=self._model,
+            query=query,
+            documents=documents,
+            top_n=min(top_k, len(candidates)),
+        )
+
+        reranked: list[Chunk] = []
+        for result in response.results:
+            chunk = candidates[result.index].chunk
+            reranked.append(chunk)
+            log.debug(
+                "rerank.result",
+                chunk_id=chunk.id,
+                relevance_score=result.relevance_score,
+                original_rank=result.index,
+            )
+
+        log.info(
+            "rerank.done",
+            query_len=len(query),
+            input_candidates=len(candidates),
+            output_chunks=len(reranked),
+        )
+        return reranked
+
+
+_client: RerankClient | None = None
+
+
+def get_rerank_client(settings: Settings | None = None) -> RerankClient:
+    global _client
+    if _client is None:
+        _client = RerankClient(settings or get_settings())
+    return _client

@@ -9,10 +9,11 @@ QA with citations, and a deviation-detection pipeline. Backend-first; frontend c
 
 ## Current state
 
-**Phase: Week 1 complete** (as of 2026-05-24)
+**Phase: Week 2 complete** (as of 2026-05-24)
 
 All 5 pre-Week-1 validation spikes are done (see `docs/spikes/`).
-Week 1 implementation is done: parse → chunk → embed → store pipeline is live.
+Week 1: parse → chunk → embed → store pipeline.
+Week 2: retrieval (RRF), rerank (Cohere), extraction (12 CUAD categories), risk flags.
 
 ### What's built and working
 
@@ -29,17 +30,18 @@ Week 1 implementation is done: parse → chunk → embed → store pipeline is l
 | Observability | `backend/app/observability/__init__.py` | ✅ Langfuse wrapper, disabled gracefully if keys absent |
 | Contracts API | `backend/app/api/contracts.py` | ✅ POST /upload, GET /, GET /{id} |
 | App startup | `backend/app/main.py` | ✅ lifespan wires all clients, flushes on shutdown |
+| Retrieval | `backend/app/retrieval/__init__.py` | ✅ pgvector dense + pg_search BM25 + RRF k=60 |
+| Rerank | `backend/app/rerank/__init__.py` | ✅ Cohere rerank-3, top-8, tenacity retry |
+| Extraction | `backend/app/extraction/__init__.py` | ✅ 12 CUAD categories, Haiku pass + Sonnet recheck |
+| Flags | `backend/app/flags/__init__.py` | ✅ 4 risk flags, deterministic (regex + extraction) |
 
 ### What's still a stub (raises NotImplementedError)
 
 - `app/api/qa.py` — Week 3
 - `app/api/deviation.py` — Week 5–6
 - `app/api/evals.py` — Week 3–4
-- `app/retrieval/` — Week 2
-- `app/rerank/` — Week 2
-- `app/extraction/` — Week 2
 - `app/citations/` — Week 3
-- `app/flags/`, `app/playbooks/` — Week 4–5
+- `app/playbooks/` — Week 4
 - `app/deviation/` — Week 5
 
 ---

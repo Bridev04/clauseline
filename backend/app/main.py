@@ -16,11 +16,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.embeddings import get_embedding_client
     from app.llm import get_llm_client
     from app.observability import get_observability_client
+    from app.rerank import get_rerank_client
 
     engine = get_engine()
     obs = get_observability_client(settings)
     get_embedding_client(settings)
     get_llm_client(settings)
+    get_rerank_client(settings)
 
     yield
 
