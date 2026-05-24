@@ -1,0 +1,71 @@
+import enum
+import uuid
+from datetime import datetime, timezone
+
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+EMBEDDING_DIM = 1024
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class ContractStatus(str, enum.Enum):
+    pending = "pending"
+    indexing = "indexing"
+    ready = "ready"
+    error = "error"
+
+
+class ChunkType(str, enum.Enum):
+    section = "section"
+    clause = "clause"
+
+
+class Contract(Base):
+    __tablename__ = "contracts"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    page_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[ContractStatus] = mapped_column(
+        SAEnum(ContractStatus, name="contractstatus"), nullable=False, default=ContractStatus.pending
+    )
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    chunks: Mapped[list["Chunk"]] = relationship(
+        "Chunk", back_populates="contract", cascade="all, delete-orphan"
+    )
+
+
+class Chunk(Base):
+    __tablename__ = "chunks"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    contract_id: Mapped[str] = mapped_column(
+        String, ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    chunk_type: Mapped[ChunkType] = mapped_column(
+        SAEnum(ChunkType, name="chunktype"), nullable=False
+    )
+    page: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Only clause-type chunks are embedded; section chunks have embedding=None
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
+
+    contract: Mapped["Contract"] = relationship("Contract", back_populates="chunks")

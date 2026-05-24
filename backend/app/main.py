@@ -11,12 +11,21 @@ from app.config import get_settings
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
-    # TODO Week 1: warm async DB connection pool (SQLAlchemy async engine)
-    # TODO Week 1: initialize Voyage embedding client
-    # TODO Week 1: initialize Langfuse client and attach to app state
-    _ = settings  # referenced here so config is validated at startup
+
+    from app.db.session import get_engine
+    from app.embeddings import get_embedding_client
+    from app.llm import get_llm_client
+    from app.observability import get_observability_client
+
+    engine = get_engine()
+    obs = get_observability_client(settings)
+    get_embedding_client(settings)
+    get_llm_client(settings)
+
     yield
-    # TODO Week 1: close DB pool and flush Langfuse on shutdown
+
+    obs.flush()
+    await engine.dispose()
 
 
 def create_app() -> FastAPI:

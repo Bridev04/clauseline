@@ -31,9 +31,9 @@ class Settings(BaseSettings):
     postgres_db: str = "clauseline"
     database_url: str = "postgresql+asyncpg://clauseline:clauseline@localhost:5432/clauseline"
 
-    # Langfuse
-    langfuse_public_key: str
-    langfuse_secret_key: str
+    # Langfuse — optional in dev; tracing silently disabled if unset
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
     langfuse_host: str = "https://cloud.langfuse.com"
 
     # App

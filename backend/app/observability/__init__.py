@@ -9,3 +9,50 @@ dependency injection.
 
 Implemented: Week 1 (client), Week 3 (eval integration).
 """
+import structlog
+
+from app.config import Settings, get_settings
+
+log = structlog.get_logger(__name__)
+
+
+class ObservabilityClient:
+    """Thin wrapper around Langfuse. Silently disabled if keys are not configured."""
+
+    def __init__(self, settings: Settings) -> None:
+        self._enabled = bool(settings.langfuse_public_key and settings.langfuse_secret_key)
+        self._client = None
+        if self._enabled:
+            from langfuse import Langfuse  # type: ignore[import-untyped]
+
+            self._client = Langfuse(
+                public_key=settings.langfuse_public_key,
+                secret_key=settings.langfuse_secret_key,
+                host=settings.langfuse_host,
+            )
+            log.info("observability.langfuse.enabled", host=settings.langfuse_host)
+        else:
+            log.warning("observability.langfuse.disabled", reason="keys not configured")
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    def trace(self, name: str, **kwargs: object) -> object | None:
+        if self._client is None:
+            return None
+        return self._client.trace(name=name, **kwargs)  # type: ignore[union-attr]
+
+    def flush(self) -> None:
+        if self._client is not None:
+            self._client.flush()  # type: ignore[union-attr]
+
+
+_client: ObservabilityClient | None = None
+
+
+def get_observability_client(settings: Settings | None = None) -> ObservabilityClient:
+    global _client
+    if _client is None:
+        _client = ObservabilityClient(settings or get_settings())
+    return _client
