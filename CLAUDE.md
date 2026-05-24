@@ -3,23 +3,24 @@
 ## What this is
 
 Contract intelligence portfolio project: hybrid retrieval (pgvector + pg_search BM25 + RRF),
-QA with citations, and a deviation-detection pipeline. Backend-first; frontend comes in Week 3.
+QA with citations, and a deviation-detection pipeline. Frontend scaffolded in Week 3.
 
 ---
 
 ## Current state
 
-**Phase: Week 2 complete** (as of 2026-05-24)
+**Phase: Week 3 complete** (as of 2026-05-24)
 
 All 5 pre-Week-1 validation spikes are done (see `docs/spikes/`).
 Week 1: parse → chunk → embed → store pipeline.
 Week 2: retrieval (RRF), rerank (Cohere), extraction (12 CUAD categories), risk flags.
+Week 3: QA endpoint with citation grounding, eval harness + JSONL store, evals API, Next.js frontend.
 
 ### What's built and working
 
 | Module | Location | Status |
 |--------|----------|--------|
-| Config | `backend/app/config.py` | ✅ pydantic-settings, all env vars |
+| Config | `backend/app/config.py` | ✅ pydantic-settings, all env vars + `evals_results_dir` |
 | DB models | `backend/app/db/models.py` | ✅ Contract, Chunk (pgvector + JSONB bbox) |
 | DB session | `backend/app/db/session.py` | ✅ SQLAlchemy async, asyncpg |
 | Migration | `backend/migrations/versions/0001_initial_schema.py` | ✅ tables + ivfflat + bm25 indexes |
@@ -34,15 +35,40 @@ Week 2: retrieval (RRF), rerank (Cohere), extraction (12 CUAD categories), risk 
 | Rerank | `backend/app/rerank/__init__.py` | ✅ Cohere rerank-3, top-8, tenacity retry |
 | Extraction | `backend/app/extraction/__init__.py` | ✅ 12 CUAD categories, Haiku pass + Sonnet recheck |
 | Flags | `backend/app/flags/__init__.py` | ✅ 4 risk flags, deterministic (regex + extraction) |
+| Citations | `backend/app/citations/__init__.py` | ✅ grounding validation, containment metrics, bbox IoU |
+| QA API | `backend/app/api/qa.py` | ✅ POST /ask — retrieve→rerank→Sonnet→grounding validate |
+| Evals module | `backend/app/evals/__init__.py` | ✅ recall@k + MRR@k via content-containment |
+| Evals store | `backend/app/evals/store.py` | ✅ EvalResultEntry dataclass, JSONL save/load |
+| Evals API | `backend/app/api/evals.py` | ✅ GET /summary, GET /failures (paginated, bucket filter) |
+| Golden set | `evals/golden/sample.jsonl` | ✅ 9 questions — 3 per bucket (A/B/C); set contract_id after indexing |
+| Eval runner | `evals/scripts/run_eval.py` | ✅ async script, imports app directly, writes JSONL results |
+| Frontend | `frontend/` | ✅ Next.js 16 + TanStack Query + Recharts + shadcn/ui |
 
 ### What's still a stub (raises NotImplementedError)
 
-- `app/api/qa.py` — Week 3
+- `app/api/qa.py` → `/evals/experiments` — Week 4
 - `app/api/deviation.py` — Week 5–6
-- `app/api/evals.py` — Week 3–4
-- `app/citations/` — Week 3
 - `app/playbooks/` — Week 4
 - `app/deviation/` — Week 5
+- `frontend/src/components/evals/TabExperiments.tsx` — Week 4
+
+### Frontend routes
+
+| Route | What it does |
+|-------|-------------|
+| `/` | Landing page — links to evals dashboard and API docs |
+| `/evals` | 4-tab dashboard: Metrics, Failures, Experiments (stub), Live Demo |
+
+### Running the eval harness
+
+```bash
+# 1. Index a contract first via POST /api/contracts/upload
+# 2. Update contract_id in evals/golden/sample.jsonl
+# 3. Run:
+cd backend
+uv run python ../evals/scripts/run_eval.py
+# Results written to evals/results/run_<timestamp>.jsonl
+```
 
 ---
 
@@ -146,8 +172,8 @@ Baseline: CUAD paper RoBERTa-large F1 (see `docs/spikes/spike-3-contracteval-ove
 | Week | Focus |
 |------|-------|
 | W1 | ✅ parsing, chunking, DB, LLM client, Langfuse, contracts API |
-| W2 | retrieval (RRF query), rerank (Cohere), extraction (12 categories), risk flags |
-| W3 | QA endpoint, citations, eval harness, eval frontend |
+| W2 | ✅ retrieval (RRF query), rerank (Cohere), extraction (12 categories), risk flags |
+| W3 | ✅ QA endpoint, citations, eval harness, eval frontend |
 | W4 | playbook YAML loader, experiment tracking |
 | W5 | LangGraph deviation pipeline (5-node) |
 | W6 | HITL interrupt, eval CI gate (`mean − 1·stddev`) |
