@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
 
+    # Evals — path to evals/results/ relative to the working directory
+    evals_results_dir: str = "../evals/results"
+
     # Retrieval knobs
     rrf_k: int = Field(default=60, ge=1)
     retrieval_top_k_dense: int = Field(default=20, ge=1)
