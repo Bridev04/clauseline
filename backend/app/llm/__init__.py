@@ -20,7 +20,7 @@ from app.config import Settings, get_settings
 log = structlog.get_logger(__name__)
 
 
-class Tier(str, enum.Enum):
+class Tier(enum.StrEnum):
     HAIKU = "haiku"    # classification, extraction, high-volume
     SONNET = "sonnet"  # QA answers, deviation summaries, load-bearing accuracy
 
@@ -54,7 +54,7 @@ class LLMClient:
         block = response.content[0]
         if block.type != "text":
             raise ValueError(f"Unexpected response content type: {block.type}")
-        return block.text  # type: ignore[return-value]
+        return block.text  # type: ignore[no-any-return]
 
 
 _client: LLMClient | None = None

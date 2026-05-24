@@ -17,7 +17,7 @@ CLAUSE_TOKEN_LIMIT = 300
 
 
 def _approx_tokens(text: str) -> int:
-    # Words × 1.3 is a reasonable approximation for legal English
+    # Words * 1.3 is a reasonable approximation for legal English
     return max(1, int(len(text.split()) * 1.3))
 
 

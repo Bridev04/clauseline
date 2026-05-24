@@ -1,0 +1,26 @@
+id: eval-fixture-v1
+name: Eval Fixture Playbook
+description: Minimal playbook used as a fixture in the eval harness. Covers the
+  CUAD categories exercised by the golden question set.
+version: "1.0"
+rules:
+  - category: governing_law
+    condition: present
+    severity: high
+    description: Governing law must be specified
+
+  - category: confidentiality
+    condition: present
+    severity: medium
+
+  - category: termination_for_convenience
+    condition: present
+    severity: medium
+
+  - category: cap_on_liability
+    condition: present
+    severity: high
+
+  - category: uncapped_liability
+    condition: absent
+    severity: critical

@@ -106,7 +106,7 @@ async def upload_contract(
         contract.status = ContractStatus.error
         await session.commit()
         log.exception("contracts.upload.failed", contract_id=contract.id)
-        raise HTTPException(status_code=500, detail="Failed to process contract")
+        raise HTTPException(status_code=500, detail="Failed to process contract") from None
 
 
 @router.get("/")

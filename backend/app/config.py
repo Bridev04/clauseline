@@ -40,8 +40,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
 
-    # Evals — path to evals/results/ relative to the working directory
+    # Evals — paths relative to the working directory (backend/)
     evals_results_dir: str = "../evals/results"
+    playbooks_dir: str = "../data/playbooks/yaml"
 
     # Retrieval knobs
     rrf_k: int = Field(default=60, ge=1)

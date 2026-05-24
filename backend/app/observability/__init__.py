@@ -23,7 +23,7 @@ class ObservabilityClient:
         self._enabled = bool(settings.langfuse_public_key and settings.langfuse_secret_key)
         self._client = None
         if self._enabled:
-            from langfuse import Langfuse  # type: ignore[import-untyped]
+            from langfuse import Langfuse
 
             self._client = Langfuse(
                 public_key=settings.langfuse_public_key,
@@ -41,11 +41,11 @@ class ObservabilityClient:
     def trace(self, name: str, **kwargs: object) -> object | None:
         if self._client is None:
             return None
-        return self._client.trace(name=name, **kwargs)  # type: ignore[union-attr]
+        return self._client.trace(name=name, **kwargs)  # type: ignore[attr-defined, no-any-return]
 
     def flush(self) -> None:
         if self._client is not None:
-            self._client.flush()  # type: ignore[union-attr]
+            self._client.flush()
 
 
 _client: ObservabilityClient | None = None

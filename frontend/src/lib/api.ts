@@ -84,6 +84,32 @@ export async function fetchFailures(
   return res.json();
 }
 
+export interface ExperimentDelta {
+  pass_rate: number;
+  recall_at_8: number;
+  mrr_at_8: number;
+  containment_precision: number;
+  containment_recall: number;
+}
+
+export interface ExperimentRun {
+  run_id: string;
+  started_at: string;
+  question_count: number;
+  pass_rate: number;
+  recall_at_8: number;
+  mrr_at_8: number;
+  containment_precision: number;
+  containment_recall: number;
+  delta: ExperimentDelta | null;
+}
+
+export async function fetchExperiments(): Promise<ExperimentRun[]> {
+  const res = await fetch(`${API_BASE}/api/evals/experiments`);
+  if (!res.ok) throw new Error(`Experiments request failed: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchContracts(): Promise<{ id: string; filename: string; status: string }[]> {
   const res = await fetch(`${API_BASE}/api/contracts/`);
   if (!res.ok) throw new Error(`Contracts request failed: ${res.status}`);

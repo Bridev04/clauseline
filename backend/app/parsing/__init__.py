@@ -27,11 +27,11 @@ class ParseResult:
 
 def parse_pdf(file_bytes: bytes) -> ParseResult:
     file_hash = hashlib.sha256(file_bytes).hexdigest()
-    doc = pymupdf.Document(stream=file_bytes, filetype="pdf")
+    doc = pymupdf.Document(stream=file_bytes, filetype="pdf")  # type: ignore[no-untyped-call]
     blocks: list[ParsedBlock] = []
 
-    for page_num, page in enumerate(doc):
-        for block in page.get_text("blocks"):  # type: ignore[union-attr]
+    for page_num, page in enumerate(doc):  # type: ignore[arg-type, var-annotated]
+        for block in page.get_text("blocks"):
             x0, y0, x1, y1, text, _block_no, block_type = block
             # block_type 0 = text, 1 = image; skip non-text blocks
             if block_type == 0 and text.strip():

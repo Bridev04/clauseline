@@ -9,18 +9,19 @@ QA with citations, and a deviation-detection pipeline. Frontend scaffolded in We
 
 ## Current state
 
-**Phase: Week 3 complete** (as of 2026-05-24)
+**Phase: Week 4 complete** (as of 2026-05-24)
 
 All 5 pre-Week-1 validation spikes are done (see `docs/spikes/`).
 Week 1: parse → chunk → embed → store pipeline.
 Week 2: retrieval (RRF), rerank (Cohere), extraction (12 CUAD categories), risk flags.
 Week 3: QA endpoint with citation grounding, eval harness + JSONL store, evals API, Next.js frontend.
+Week 4: playbook YAML loader (Pydantic v2 schema), /evals/experiments endpoint, TabExperiments frontend.
 
 ### What's built and working
 
 | Module | Location | Status |
 |--------|----------|--------|
-| Config | `backend/app/config.py` | ✅ pydantic-settings, all env vars + `evals_results_dir` |
+| Config | `backend/app/config.py` | ✅ pydantic-settings, all env vars + `evals_results_dir`, `playbooks_dir` |
 | DB models | `backend/app/db/models.py` | ✅ Contract, Chunk (pgvector + JSONB bbox) |
 | DB session | `backend/app/db/session.py` | ✅ SQLAlchemy async, asyncpg |
 | Migration | `backend/migrations/versions/0001_initial_schema.py` | ✅ tables + ivfflat + bm25 indexes |
@@ -39,25 +40,25 @@ Week 3: QA endpoint with citation grounding, eval harness + JSONL store, evals A
 | QA API | `backend/app/api/qa.py` | ✅ POST /ask — retrieve→rerank→Sonnet→grounding validate |
 | Evals module | `backend/app/evals/__init__.py` | ✅ recall@k + MRR@k via content-containment |
 | Evals store | `backend/app/evals/store.py` | ✅ EvalResultEntry dataclass, JSONL save/load |
-| Evals API | `backend/app/api/evals.py` | ✅ GET /summary, GET /failures (paginated, bucket filter) |
+| Evals API | `backend/app/api/evals.py` | ✅ GET /summary, GET /failures, GET /experiments (run timeline + deltas) |
 | Golden set | `evals/golden/sample.jsonl` | ✅ 9 questions — 3 per bucket (A/B/C); set contract_id after indexing |
 | Eval runner | `evals/scripts/run_eval.py` | ✅ async script, imports app directly, writes JSONL results |
+| Playbooks | `backend/app/playbooks/__init__.py` | ✅ Pydantic v2 schema, YAML loader, CUADCategory/Severity/Condition enums |
+| Playbook YAMLs | `data/playbooks/yaml/`, `evals/playbooks/yaml/` | ✅ prod sample + eval fixture |
 | Frontend | `frontend/` | ✅ Next.js 16 + TanStack Query + Recharts + shadcn/ui |
+| TabExperiments | `frontend/src/components/evals/TabExperiments.tsx` | ✅ line chart + run table with deltas |
 
 ### What's still a stub (raises NotImplementedError)
 
-- `app/api/qa.py` → `/evals/experiments` — Week 4
 - `app/api/deviation.py` — Week 5–6
-- `app/playbooks/` — Week 4
 - `app/deviation/` — Week 5
-- `frontend/src/components/evals/TabExperiments.tsx` — Week 4
 
 ### Frontend routes
 
 | Route | What it does |
 |-------|-------------|
 | `/` | Landing page — links to evals dashboard and API docs |
-| `/evals` | 4-tab dashboard: Metrics, Failures, Experiments (stub), Live Demo |
+| `/evals` | 4-tab dashboard: Metrics, Failures, Experiments (line chart + delta table), Live Demo |
 
 ### Running the eval harness
 
@@ -104,8 +105,14 @@ Health check: `curl http://localhost:8000/health`
 ```bash
 cd backend
 uv run ruff check .
-uv run mypy app
+uv run mypy app          # 25 source files, 0 errors expected
+
+cd ../frontend
+npx tsc --noEmit         # 0 errors expected
+npm run build            # next build must compile cleanly
 ```
+
+All four checks are expected to pass with 0 errors/warnings as of Week 4.
 
 ---
 

@@ -8,7 +8,7 @@ stored in pgvector's `vector` column type.
 Implemented: Week 1.
 """
 import structlog
-import voyageai  # type: ignore[import-untyped]
+import voyageai
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import Settings, get_settings
@@ -20,13 +20,13 @@ _BATCH_SIZE = 128
 
 class EmbeddingClient:
     def __init__(self, settings: Settings) -> None:
-        self._client = voyageai.AsyncClient(api_key=settings.voyage_api_key)
+        self._client = voyageai.AsyncClient(api_key=settings.voyage_api_key)  # type: ignore[attr-defined]
         self._model = settings.voyage_model
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
     async def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         result = await self._client.embed(texts, model=self._model, input_type="document")
-        return result.embeddings  # type: ignore[no-any-return]
+        return result.embeddings  # type: ignore[return-value]
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:

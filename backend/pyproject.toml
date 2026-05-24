@@ -96,13 +96,16 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = [
+    "pymupdf.*",
     "pymupdf4llm.*",
+    "pgvector.*",
     "voyageai.*",
     "cohere.*",
     "langfuse.*",
     "ragas.*",
     "llama_parse.*",
     "fitz.*",
+    "yaml",
 ]
 ignore_missing_imports = true
 

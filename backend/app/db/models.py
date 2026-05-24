@@ -1,9 +1,11 @@
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -14,14 +16,14 @@ class Base(DeclarativeBase):
     pass
 
 
-class ContractStatus(str, enum.Enum):
+class ContractStatus(enum.StrEnum):
     pending = "pending"
     indexing = "indexing"
     ready = "ready"
     error = "error"
 
 
-class ChunkType(str, enum.Enum):
+class ChunkType(enum.StrEnum):
     section = "section"
     clause = "clause"
 
@@ -41,7 +43,7 @@ class Contract(Base):
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
     chunks: Mapped[list["Chunk"]] = relationship(
@@ -63,7 +65,7 @@ class Chunk(Base):
         SAEnum(ChunkType, name="chunktype"), nullable=False
     )
     page: Mapped[int] = mapped_column(Integer, nullable=False)
-    bbox: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    bbox: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
     # Only clause-type chunks are embedded; section chunks have embedding=None
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
