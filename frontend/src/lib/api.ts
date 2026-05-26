@@ -113,7 +113,8 @@ export async function fetchExperiments(): Promise<ExperimentRun[]> {
 export async function fetchContracts(): Promise<{ id: string; filename: string; status: string }[]> {
   const res = await fetch(`${API_BASE}/api/contracts/`);
   if (!res.ok) throw new Error(`Contracts request failed: ${res.status}`);
-  return res.json();
+  const data: { contract_id: string; filename: string; status: string }[] = await res.json();
+  return data.map((c) => ({ id: c.contract_id, filename: c.filename, status: c.status }));
 }
 
 export interface DeviationRun {
@@ -156,7 +157,8 @@ export async function uploadContract(file: File): Promise<{ id: string; filename
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { detail?: string }).detail ?? `Upload failed: ${res.status}`);
   }
-  return res.json();
+  const data: { contract_id: string; filename: string; status: string } = await res.json();
+  return { id: data.contract_id, filename: data.filename, status: data.status };
 }
 
 export async function startDeviationRun(

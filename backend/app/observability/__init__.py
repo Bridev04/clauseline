@@ -41,7 +41,11 @@ class ObservabilityClient:
     def trace(self, name: str, **kwargs: object) -> object | None:
         if self._client is None:
             return None
-        return self._client.trace(name=name, **kwargs)  # type: ignore[attr-defined, no-any-return]
+        # Langfuse v4 removed .trace(); silently skip if unavailable
+        fn = getattr(self._client, "trace", None)
+        if fn is None:
+            return None
+        return fn(name=name, **kwargs)  # type: ignore[no-any-return]
 
     def flush(self) -> None:
         if self._client is not None:

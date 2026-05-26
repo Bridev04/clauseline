@@ -35,20 +35,30 @@ class RerankClient:
         """Rerank candidates by semantic relevance and return the top-k chunks.
 
         Documents are passed as plain strings (chunk content). The returned list
-        is ordered by Cohere relevance score descending.
+        is ordered by Cohere relevance score descending. Falls back to RRF order
+        if the rerank model is unavailable on the current API key.
         """
         if not candidates:
             return []
 
-        # Cohere expects documents as strings or dicts; plain strings are fine.
+        import cohere as _cohere
+
         documents = [r.chunk.content for r in candidates]
 
-        response = await self._client.rerank(
-            model=self._model,
-            query=query,
-            documents=documents,
-            top_n=min(top_k, len(candidates)),
-        )
+        try:
+            response = await self._client.rerank(
+                model=self._model,
+                query=query,
+                documents=documents,
+                top_n=min(top_k, len(candidates)),
+            )
+        except _cohere.errors.not_found_error.NotFoundError:
+            log.warning(
+                "rerank.model_unavailable",
+                model=self._model,
+                fallback="rrf_order",
+            )
+            return [r.chunk for r in candidates[:top_k]]
 
         reranked: list[Chunk] = []
         for result in response.results:
