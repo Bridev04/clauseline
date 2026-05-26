@@ -9,7 +9,7 @@ QA with citations, and a deviation-detection pipeline. Frontend scaffolded in We
 
 ## Current state
 
-**Phase: Week 5 complete** (as of 2026-05-24)
+**Phase: Week 6 complete** (as of 2026-05-26)
 
 All 5 pre-Week-1 validation spikes are done (see `docs/spikes/`).
 Week 1: parse → chunk → embed → store pipeline.
@@ -17,6 +17,7 @@ Week 2: retrieval (RRF), rerank (Cohere), extraction (12 CUAD categories), risk 
 Week 3: QA endpoint with citation grounding, eval harness + JSONL store, evals API, Next.js frontend.
 Week 4: playbook YAML loader (Pydantic v2 schema), /evals/experiments endpoint, TabExperiments frontend.
 Week 5: LangGraph deviation pipeline (5-node), deviation_runs DB table + migration, POST /deviation/run + GET /deviation/runs/{id}.
+Week 6: HITL interrupt (6th LangGraph node + MemorySaver + Command resume), POST /deviation/{id}/review, GET /deviation/runs list, eval CI gate script + GET /evals/ci-gate, TabDeviation frontend (5th tab with inline review panel).
 
 ### What's built and working
 
@@ -49,19 +50,23 @@ Week 5: LangGraph deviation pipeline (5-node), deviation_runs DB table + migrati
 | Playbook YAMLs | `data/playbooks/yaml/`, `evals/playbooks/yaml/` | ✅ prod sample + eval fixture |
 | Frontend | `frontend/` | ✅ Next.js 16 + TanStack Query + Recharts + shadcn/ui |
 | TabExperiments | `frontend/src/components/evals/TabExperiments.tsx` | ✅ line chart + run table with deltas |
-| Deviation pipeline | `backend/app/deviation/__init__.py` | ✅ 5-node LangGraph: Loader→Classifier→Comparator→Scorer→Summarizer |
-| Deviation API | `backend/app/api/deviation.py` | ✅ POST /run, GET /runs/{id}; HITL stub (Week 6) |
+| Deviation pipeline | `backend/app/deviation/__init__.py` | ✅ 6-node LangGraph: Loader→Classifier→Comparator→Scorer→Summarizer→HITL Reviewer |
+| Deviation API | `backend/app/api/deviation.py` | ✅ POST /run (pauses at HITL), GET /runs, GET /runs/{id}, POST /{id}/review |
+| Eval CI gate | `evals/scripts/ci_gate.py` | ✅ standalone script, mean − 1·stddev, exit 0/1 |
+| Evals API | `backend/app/api/evals.py` | ✅ GET /summary, /failures, /experiments, /ci-gate |
+| Migration | `backend/migrations/versions/0003_hitl_review.py` | ✅ awaiting_review enum value + review_decision/notes/reviewed_at columns |
+| TabDeviation | `frontend/src/components/evals/TabDeviation.tsx` | ✅ runs table + inline HITL review panel (Approve/Reject) |
 
-### What's still a stub (raises NotImplementedError)
+### What's still a stub
 
-- `POST /api/deviation/{run_id}/review` — Week 6 HITL interrupt
+Nothing — all endpoints are implemented.
 
 ### Frontend routes
 
 | Route | What it does |
 |-------|-------------|
 | `/` | Landing page — links to evals dashboard and API docs |
-| `/evals` | 4-tab dashboard: Metrics, Failures, Experiments (line chart + delta table), Live Demo |
+| `/evals` | 5-tab dashboard: Metrics, Failures, Experiments, Live Demo, Deviation |
 
 ### Running the eval harness
 
@@ -162,7 +167,7 @@ cd backend && uv run alembic upgrade head
 
 - **Single Postgres** (ParadeDB) for vectors + BM25 + relational — no separate vector DB
 - **RRF k=60** fusing top-20 dense + top-20 sparse results — validated in Spike 5
-- **LangGraph** scoped only to the deviation pipeline (5-node graph) — NOT used for QA
+- **LangGraph** scoped only to the deviation pipeline (6-node graph with HITL interrupt) — NOT used for QA. MemorySaver checkpointer is in-process only; not durable across restarts (swap to AsyncPostgresSaver for production).
 - **PyMuPDF** (not LlamaParse) as primary parser — bboxes needed for citation containment
 - **Cohere rerank-3** — Week 2, after fused retrieval, top-8 passed to LLM
 
@@ -186,4 +191,4 @@ Baseline: CUAD paper RoBERTa-large F1 (see `docs/spikes/spike-3-contracteval-ove
 | W3 | ✅ QA endpoint, citations, eval harness, eval frontend |
 | W4 | ✅ playbook YAML loader, experiment tracking |
 | W5 | ✅ LangGraph deviation pipeline (5-node), deviation_runs table, POST /deviation/run |
-| W6 | HITL interrupt, eval CI gate (`mean − 1·stddev`) |
+| W6 | ✅ HITL interrupt (6th node + MemorySaver), POST /review, eval CI gate script + API endpoint, TabDeviation UI |
