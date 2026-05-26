@@ -2,32 +2,33 @@
 
 > Contract intelligence with rigorous grounding, honest evals, and observable engineering.
 
-**Status:** 🚧 Pre-Week-1 (running validation spikes — see [`docs/spikes/`](docs/spikes/))
+**Status:** Week 8 complete — hybrid retrieval, QA with citations, deviation detection, HITL review, and live eval metrics all working.
 
 ---
 
 ## What this is
 
-Clauseline is a contract intelligence system built to answer a specific question: can you trust the answer? RAG over contracts is commodity in 2026. The differentiator here is a citation grounding layer that returns bounding-box–linked evidence, a hybrid retrieval pipeline with real BM25 fused via RRF in a single SQL query, and — most importantly — a navigable `/evals` page that exposes failures, experiments (including rolled-back ones), and benchmark comparisons side-by-side. Every architectural choice serves that thesis: the system should be *auditable*, not just accurate.
+Clauseline is a contract intelligence system built to answer a specific question: can you trust the answer? RAG over contracts is commodity in 2026. The differentiator here is a citation grounding layer that links every answer to exact text spans, a hybrid retrieval pipeline with real BM25 fused via RRF in a single SQL query, and a navigable `/evals` page that exposes failures, experiments (including rolled-back ones), and benchmark comparisons side-by-side. Every architectural choice serves that thesis: the system should be *auditable*, not just accurate.
 
 ---
 
 ## Headline results
 
-> Values are TBD — populated after Week 3+ eval runs. The table structure is intentional: if you can't name the metric before building, you don't know what you're building.
+Measured against the 9-question golden set (`evals/golden/sample.jsonl`) on the ACME/Globex Software License Agreement. Eval run: `run_2026-05-26T075710`.
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| Hybrid vs dense recall@8 | TBD | RRF k=60, top-8 after rerank |
-| Citation containment precision | TBD | cited chunk contains gold span (primary metric — see Spike 1) |
-| Citation containment recall | TBD | |
-| Citation set-union IoU@0.5 | TBD | visual quality indicator; not the CI gate |
-| Ragas faithfulness | TBD | LLM-judge, mean − 1σ over 3 runs |
-| Refusal accuracy (unanswerable bucket) | TBD | 20-question bucket |
-| Per-category F1 vs CUAD RoBERTa-large baseline | TBD | 12 CUAD categories (Spike 3) |
-| p95 latency (single-chunk query) | TBD | end-to-end including rerank |
-| Cost per query (Haiku-routed) | TBD | |
-| Cost per query (Sonnet-routed) | TBD | |
+| Hybrid recall@8 | **100%** | All 7 answerable questions retrieved; 5-chunk corpus means hybrid vs dense difference shows at larger scale |
+| MRR@8 | **0.93** | First gold-matching chunk ranked 1st for 6/7 answerable questions |
+| Citation containment precision | **85.7%** | Fraction of cited chunks containing ≥1 gold span |
+| Citation containment recall | **85.7%** | Fraction of gold spans covered by ≥1 cited chunk; 1 miss (q002) due to token truncation on complex renewal clause |
+| Citation set-union IoU@0.5 | N/A | Requires bbox annotation; containment is the CI gate metric (Spike 1 decision) |
+| Refusal accuracy (unanswerable bucket) | **50%** | 1/2; q007 answered correctly about which party holds the non-compete but did not refuse — a legitimate model quality edge case |
+| Per-category F1 vs CUAD RoBERTa-large | not yet measured | Requires larger labeled set across 12 CUAD categories |
+| p50 latency (end-to-end) | **6.4s** | Embedding + RRF retrieval + Sonnet; Cohere rerank on trial key fell back to RRF order |
+| p90 latency (end-to-end) | **8.1s** | |
+| Cost per query (Haiku-routed) | ~$0.002 | Haiku for classification/extraction legs only |
+| Cost per query (Sonnet-routed) | ~$0.013 | Sonnet 4.6 at ~3K input + ~300 output tokens |
 
 ---
 
@@ -39,8 +40,7 @@ PDF
  ▼
 ┌─────────────────────────────────────────────┐
 │  Parsing                                     │
-│  PyMuPDF4LLM (primary) → markdown + bboxes  │
-│  LlamaParse (fallback for scans/complex)     │
+│  PyMuPDF → text blocks + bboxes             │
 └──────────────────────┬──────────────────────┘
                        │
                        ▼
@@ -85,7 +85,8 @@ PDF
                                 ▼
                     ┌──────────────────────────┐
                     │  Citation Validator       │
-                    │  deterministic bbox IoU   │
+                    │  whitespace-normalized    │
+                    │  containment check;       │
                     │  links answer → evidence  │
                     └──────────────┬───────────┘
                                    │
@@ -102,23 +103,23 @@ PDF + Playbook YAML
  │
  ▼
 LangGraph deviation pipeline
-5 nodes: Loader → Classifier (Haiku, parallel per category)
+6 nodes: Loader → Classifier (Haiku, parallel per category)
        → Comparator (Sonnet, parallel per rule)
        → Scorer (deterministic)
-       → Summarizer → HITL interrupt
+       → Summarizer → HITL interrupt (AsyncPostgresSaver)
 ```
 
 ---
 
 ## The four load-bearing pieces
 
-1. **Citation grounding with bbox + IoU** — Every answer carries evidence references that include page number and bounding box coordinates from the source PDF. A deterministic validator checks that claimed citations actually overlap the retrieved chunks. IoU@0.5 is the primary citation quality metric.
+1. **Citation grounding** — Every answer carries evidence references with chunk ID and quoted text. A deterministic validator checks that claimed citations are exact substrings of the retrieved chunks (whitespace-normalized to handle PDF line-break artefacts). Containment recall is the primary CI gate metric (IoU@0.5 tracked but not gated — Spike 1 finding: union bbox is geometrically misleading on multi-span clauses).
 
 2. **Hybrid retrieval with RRF** — A single Postgres query combines pgvector cosine similarity with pg_search BM25, fused via Reciprocal Rank Fusion (k=60). This is non-trivial to implement correctly and is validated in Spike 5 before any retrieval code is written.
 
-3. **Playbook deviation detection** — A LangGraph pipeline (5 nodes + human-in-the-loop interrupt) compares contract clauses against a customer's playbook YAML. Haiku handles the parallel classification pass; Sonnet handles the per-rule comparison.
+3. **Playbook deviation detection** — A LangGraph pipeline (6 nodes + HITL interrupt) compares contract clauses against a customer playbook YAML. Haiku handles the parallel classification pass; Sonnet handles the per-rule comparison. Checkpoints are durable via AsyncPostgresSaver.
 
-4. **The `/evals` page with four tabs** — (1) headline metrics + per-bucket breakdown, (2) failure explorer with retrieved chunks + Langfuse trace link, (3) experiments timeline including rolled-back ones, (4) live demo with Trust Panel. Built early because it changes how you build.
+4. **The `/evals` page with five tabs** — (1) headline metrics + per-bucket breakdown, (2) failure explorer with retrieved chunks + Langfuse trace link, (3) experiments timeline including rolled-back ones, (4) live demo with Trust Panel, (5) deviation run review with HITL panel. Built early because it changes how you build.
 
 ---
 
@@ -133,9 +134,9 @@ LangGraph deviation pipeline
 | Reranker | Cohere `rerank-3` | |
 | LLM (fast) | Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) | classification, extraction |
 | LLM (precise) | Claude Sonnet 4.6 (`claude-sonnet-4-6`) | QA, comparison, summaries |
-| Agentic pipeline | LangGraph | deviation only |
+| Agentic pipeline | LangGraph + AsyncPostgresSaver | deviation only |
 | Observability | Langfuse | every LLM call |
-| Frontend | Next.js + TanStack Query + Recharts + shadcn/ui | Week 3+ |
+| Frontend | Next.js + TanStack Query + Recharts + shadcn/ui | |
 
 ---
 
@@ -144,65 +145,112 @@ LangGraph deviation pipeline
 ```
 clauseline/
 ├── backend/          FastAPI app, all pipeline logic, tests
-├── frontend/         Next.js app (scaffolded Week 3)
+├── frontend/         Next.js app
 ├── evals/            Golden sets, eval results, scripts
 ├── data/             PDFs + playbook YAMLs (gitignored content)
 ├── docker/           docker-compose for ParadeDB
 ├── docs/             Architecture, decision log, spike reports
-└── .github/          CI + future eval gate
+└── .github/          CI with eval gate
 ```
 
 ---
 
-## Eval strategy (preview)
+## Eval strategy
 
 | Layer | Metric | Method | Gate |
 |-------|--------|--------|------|
-| Retrieval | recall@8 | deterministic | ≥ baseline |
-| Retrieval | MRR@8 | deterministic | ≥ baseline |
-| Citation | IoU@0.5 precision/recall | deterministic (bbox) | ≥ baseline |
+| Retrieval | recall@8 | deterministic (containment) | ≥ baseline |
+| Retrieval | MRR@8 | deterministic (containment) | ≥ baseline |
+| Citation | containment precision/recall | deterministic (whitespace-normalized substring) | ≥ baseline |
+| Citation | IoU@0.5 | deterministic (bbox) | tracked, not gated |
 | Generation | Ragas faithfulness | LLM-judge | mean − 1σ ≥ baseline |
-| Generation | Ragas answer relevance | LLM-judge | mean − 1σ ≥ baseline |
 | Generation | Refusal accuracy | deterministic | ≥ baseline |
 | Latency/cost | p95 latency, $/query | deterministic | no regression |
 
-**Golden set:** 60 questions across 3 buckets of 20:
-- Bucket A — single-chunk answers (clean retrieval signal)
-- Bucket B — multi-chunk answers (requires synthesis across passages)
-- Bucket C — unanswerable (tests refusal; model must say "I don't know")
+**Golden set:** 9 questions across 3 buckets:
+- Bucket A — single-chunk answers (governing law, liability cap, termination notice, renewal term, IP ownership)
+- Bucket B — multi-chunk answers (indemnification, anti-assignment)
+- Bucket C — unanswerable (tests refusal — the model must recognize the question cannot be answered from the excerpts)
 
-**Merge gate:** `mean − 1·stddev` over 3 LLM-judge runs must not drop below the baseline JSON in `evals/results/baseline.json`. Deterministic metrics must not regress at all. Gate lands in CI Week 6.
-
----
-
-## Pre-Week-1 validation spikes
-
-See [`docs/spikes/`](docs/spikes/) for full templates and decision rules.
-
-- **Spike 1 — Citation reality check:** Do real contract Q&A answers map to single bboxes or require set-union? Determines whether IoU@0.5 is a sound metric or needs redesign.
-- **Spike 2 — ContractNLI mapping:** How well do the 17 ContractNLI hypotheses map to our target playbook categories? Determines whether we use ContractNLI as a dev fixture or hand-author cases.
-- **Spike 3 — ContractEval overlap:** What 12 CUAD categories appear in ContractEval's test set? The *output* of this spike is our final category list.
-- **Spike 4 — README outline:** ✅ DONE — this file is the deliverable.
-- **Spike 5 — pg_search install verification:** Does the ParadeDB image support the exact SQL syntax for fused pgvector + pg_search + RRF? Must validate before writing any retrieval code.
+**CI gate:** `mean − 1·stddev` over 3 eval runs must not drop below the baseline. Script at `evals/scripts/ci_gate.py`; wired into `.github/workflows/eval.yml`.
 
 ---
 
 ## Quick start
 
-> ⚠️ Not runnable yet — application code lands Week 1+.
+### Prerequisites
+- Docker Desktop with WSL integration enabled
+- `uv` installed (`curl -LsSf https://astral.sh/uv | sh`)
+- API keys in `.env` (copy `.env.example`, fill in values)
+
+### Start Postgres
 
 ```bash
-# Backend
-cd backend
-uv sync
-docker compose -f ../docker/docker-compose.yml up -d
-uv run uvicorn app.main:app --reload
+docker compose -f docker/docker-compose.yml up -d
+```
 
-# Frontend (Week 3+)
+### Install deps + apply migrations
+
+```bash
+cd backend
+uv sync --extra dev
+uv run alembic upgrade head
+```
+
+### Run the server
+
+```bash
+cd backend
+uv run uvicorn app.main:app --reload
+```
+
+API docs: http://localhost:8000/docs  
+Health: `curl http://localhost:8000/health`
+
+### Run the frontend
+
+```bash
 cd frontend
 pnpm install
 pnpm dev
 ```
+
+Frontend: http://localhost:3000
+
+### Run the eval harness
+
+```bash
+# 1. Upload a contract: POST http://localhost:8000/api/contracts/upload
+# 2. Update contract_id in evals/golden/sample.jsonl
+# 3. Run:
+cd backend
+uv run python ../evals/scripts/run_eval.py
+# Results written to evals/results/run_<timestamp>.jsonl
+```
+
+### Checks
+
+```bash
+cd backend
+uv run ruff check .
+uv run mypy app
+
+cd ../frontend
+npx tsc --noEmit
+npm run build
+```
+
+---
+
+## Validation spikes
+
+See [`docs/spikes/`](docs/spikes/) for full write-ups.
+
+- **Spike 1 — Citation reality check:** Containment (substring match) is the sound primary metric; IoU@0.5 tracked as a secondary visual indicator.
+- **Spike 2 — ContractNLI mapping:** 17 ContractNLI hypotheses mapped to playbook categories; hand-authored fixtures used for deviation evals.
+- **Spike 3 — ContractEval overlap:** 12 CUAD categories selected; CUAD RoBERTa-large F1 is the baseline.
+- **Spike 4 — README outline:** This file.
+- **Spike 5 — pg_search install verification:** ParadeDB confirmed; `@@@` operator requires field-qualified queries (`'content:term'`).
 
 ---
 

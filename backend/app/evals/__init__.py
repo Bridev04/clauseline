@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.citations import GoldSpan
+from app.citations import GoldSpan, _norm
 from app.db.models import Chunk
 
 
@@ -34,13 +34,13 @@ def compute_retrieval_metrics(
     if not retrieved_chunks or not gold_spans:
         return RetrievalMetrics(recall_at_k=0.0, mrr_at_k=0.0, k=k)
 
-    gold_texts = [s.text.strip() for s in gold_spans if s.text.strip()]
+    gold_texts = [_norm(s.text) for s in gold_spans if s.text.strip()]
     if not gold_texts:
         return RetrievalMetrics(recall_at_k=0.0, mrr_at_k=0.0, k=k)
 
     first_rank: int | None = None
     for rank, chunk in enumerate(retrieved_chunks, start=1):
-        if first_rank is None and any(gt in chunk.content for gt in gold_texts):
+        if first_rank is None and any(gt in _norm(chunk.content) for gt in gold_texts):
             first_rank = rank
 
     recall = 1.0 if first_rank is not None else 0.0

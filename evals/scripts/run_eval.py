@@ -281,9 +281,13 @@ async def main(golden_path: Path, results_dir: Path) -> None:
     session_factory = get_session_factory()
 
     results: list[EvalResultEntry] = []
-    for entry in entries:
+    for i, entry in enumerate(entries):
         result = await _run_question(entry, session_factory, run_id)
         results.append(result)
+        if i < len(entries) - 1:
+            # Voyage free tier: 3 RPM. Each question makes one embed call at
+            # the start. Sleep 22s to stay safely under the limit.
+            await asyncio.sleep(22)
 
     out_path = save_results(results, results_dir, run_id)
 

@@ -15,9 +15,15 @@ then exposes eval-time metrics (Spike 1 decision):
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from app.db.models import Chunk
+
+
+def _norm(text: str) -> str:
+    """Collapse any whitespace run (including PDF-extraction newlines) to a single space."""
+    return re.sub(r"\s+", " ", text).strip()
 
 
 @dataclass
@@ -77,8 +83,8 @@ def validate_grounding(
         if chunk is None:
             results.append(GroundingResult(citation=c, is_grounded=False, chunk_page=0))
             continue
-        needle = c.quoted_text.strip()
-        is_grounded = bool(needle) and needle in chunk.content
+        needle = _norm(c.quoted_text)
+        is_grounded = bool(needle) and needle in _norm(chunk.content)
         results.append(
             GroundingResult(citation=c, is_grounded=is_grounded, chunk_page=chunk.page)
         )
@@ -102,8 +108,8 @@ def compute_containment(
             gold_span_count=len(gold_spans),
         )
 
-    cited_texts = [c.content for c in cited_chunks]
-    gold_texts = [s.text.strip() for s in gold_spans if s.text.strip()]
+    cited_texts = [_norm(c.content) for c in cited_chunks]
+    gold_texts = [_norm(s.text) for s in gold_spans if s.text.strip()]
 
     precision_hits = sum(
         1 for ct in cited_texts if any(gt in ct for gt in gold_texts)

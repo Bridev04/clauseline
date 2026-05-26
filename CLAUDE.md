@@ -9,7 +9,7 @@ QA with citations, and a deviation-detection pipeline. Frontend scaffolded in We
 
 ## Current state
 
-**Phase: Week 7 complete** (as of 2026-05-26)
+**Phase: Week 8 complete** (as of 2026-05-26)
 
 All 5 pre-Week-1 validation spikes are done (see `docs/spikes/`).
 Week 1: parse → chunk → embed → store pipeline.
@@ -19,6 +19,7 @@ Week 4: playbook YAML loader (Pydantic v2 schema), /evals/experiments endpoint, 
 Week 5: LangGraph deviation pipeline (5-node), deviation_runs DB table + migration, POST /deviation/run + GET /deviation/runs/{id}.
 Week 6: HITL interrupt (6th LangGraph node + MemorySaver + Command resume), POST /deviation/{id}/review, GET /deviation/runs list, eval CI gate script + GET /evals/ci-gate, TabDeviation frontend (5th tab with inline review panel).
 Week 7: AsyncPostgresSaver (durable deviation checkpoints), GET /api/playbooks/, upload + deviation-launch UI in frontend, eval CI gate wired into GitHub Actions, CORS from settings.
+Week 8: golden set aligned to indexed contract, whitespace-normalized grounding fix in citations/evals modules, Voyage rate-limit handling in eval runner, README populated with real metrics (run 2026-05-26T075710).
 
 ### What's built and working
 
@@ -198,3 +199,4 @@ Baseline: CUAD paper RoBERTa-large F1 (see `docs/spikes/spike-3-contracteval-ove
 | W5 | ✅ LangGraph deviation pipeline (5-node), deviation_runs table, POST /deviation/run |
 | W6 | ✅ HITL interrupt (6th node + MemorySaver), POST /review, eval CI gate script + API endpoint, TabDeviation UI |
 | W7 | ✅ AsyncPostgresSaver (durable checkpoints), GET /api/playbooks/, upload + deviation-launch UI, CI gate in Actions |
+| W8 | ✅ golden set aligned to real contract, grounding whitespace-norm fix, eval rate-limit handling, README metrics populated |
