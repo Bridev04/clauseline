@@ -4,9 +4,11 @@ JSONL result files; these endpoints aggregate and serve them.
 
 Week 3: /summary and /failures.
 Week 4: /experiments.
+Week 6: /ci-gate.
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -196,3 +198,92 @@ async def get_experiments() -> list[ExperimentRun]:
         )
 
     return ordered
+
+
+# ---------------------------------------------------------------------------
+# CI gate
+# ---------------------------------------------------------------------------
+
+_CI_GATE_METRICS = {"recall_at_8", "mrr_at_8", "containment_precision", "containment_recall", "pass_rate"}
+
+
+class CIGateResponse(BaseModel):
+    status: str  # "pass" | "fail" | "insufficient_data"
+    metric: str
+    threshold: float | None = None
+    latest_value: float | None = None
+    latest_run_id: str | None = None
+    mean: float | None = None
+    stddev: float | None = None
+    run_count: int
+    baseline_runs: int | None = None
+    message: str | None = None
+
+
+def _stddev(values: list[float], mean: float) -> float:
+    if len(values) < 2:
+        return 0.0
+    variance = sum((v - mean) ** 2 for v in values) / (len(values) - 1)
+    return math.sqrt(variance)
+
+
+@router.get("/ci-gate", response_model=CIGateResponse)
+async def ci_gate(
+    metric: str = Query(default="recall_at_8", description="Metric to gate on"),
+    min_runs: int = Query(default=3, ge=2, description="Minimum runs required for a baseline"),
+) -> CIGateResponse:
+    """Statistical CI gate: fail if the latest run is below mean - 1*stddev of prior runs."""
+    if metric not in _CI_GATE_METRICS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown metric '{metric}'. Valid: {sorted(_CI_GATE_METRICS)}",
+        )
+
+    results = _load()
+    if not results:
+        return CIGateResponse(
+            status="insufficient_data",
+            metric=metric,
+            run_count=0,
+            message="No eval results found.",
+        )
+
+    run_groups: dict[str, list[EvalResultEntry]] = {}
+    for e in results:
+        run_groups.setdefault(e.run_id, []).append(e)
+
+    run_summaries: list[tuple[str, float, str]] = []
+    for run_id, run_entries in run_groups.items():
+        avg = _avg([float(getattr(e, metric)) for e in run_entries])
+        earliest = min(e.timestamp for e in run_entries)
+        run_summaries.append((run_id, avg, earliest))
+
+    run_summaries.sort(key=lambda x: x[2])
+    run_count = len(run_summaries)
+
+    if run_count < min_runs:
+        return CIGateResponse(
+            status="insufficient_data",
+            metric=metric,
+            run_count=run_count,
+            message=f"Only {run_count} run(s); need {min_runs} for a baseline.",
+        )
+
+    baseline_values = [avg for _, avg, _ in run_summaries[:-1]]
+    latest_run_id, latest_value, _ = run_summaries[-1]
+
+    mean = _avg(baseline_values)
+    stddev = _stddev(baseline_values, mean)
+    threshold = mean - stddev
+
+    return CIGateResponse(
+        status="pass" if latest_value >= threshold else "fail",
+        metric=metric,
+        threshold=round(threshold, 4),
+        latest_value=round(latest_value, 4),
+        latest_run_id=latest_run_id,
+        mean=round(mean, 4),
+        stddev=round(stddev, 4),
+        run_count=run_count,
+        baseline_runs=len(baseline_values),
+    )

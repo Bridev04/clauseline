@@ -76,6 +76,7 @@ class Chunk(Base):
 class DeviationRunStatus(enum.StrEnum):
     pending = "pending"
     running = "running"
+    awaiting_review = "awaiting_review"
     completed = "completed"
     failed = "failed"
 
@@ -97,6 +98,12 @@ class DeviationRun(Base):
     )
     result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # HITL review fields (Week 6)
+    review_decision: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

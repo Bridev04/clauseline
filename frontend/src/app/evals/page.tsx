@@ -3,6 +3,7 @@ import { TabMetrics } from "@/components/evals/TabMetrics";
 import { TabFailures } from "@/components/evals/TabFailures";
 import { TabExperiments } from "@/components/evals/TabExperiments";
 import { TabLiveDemo } from "@/components/evals/TabLiveDemo";
+import { TabDeviation } from "@/components/evals/TabDeviation";
 
 export const metadata = {
   title: "Evals — Clauseline",
@@ -24,6 +25,7 @@ export default function EvalsPage() {
           <TabsTrigger value="failures">Failures</TabsTrigger>
           <TabsTrigger value="experiments">Experiments</TabsTrigger>
           <TabsTrigger value="demo">Live demo</TabsTrigger>
+          <TabsTrigger value="deviation">Deviation</TabsTrigger>
         </TabsList>
 
         <TabsContent value="metrics">
@@ -40,6 +42,10 @@ export default function EvalsPage() {
 
         <TabsContent value="demo">
           <TabLiveDemo />
+        </TabsContent>
+
+        <TabsContent value="deviation">
+          <TabDeviation />
         </TabsContent>
       </Tabs>
     </main>

@@ -115,3 +115,48 @@ export async function fetchContracts(): Promise<{ id: string; filename: string; 
   if (!res.ok) throw new Error(`Contracts request failed: ${res.status}`);
   return res.json();
 }
+
+export interface DeviationRun {
+  run_id: string;
+  contract_id: string;
+  playbook_id: string;
+  status: string;
+  overall_severity: string | null;
+  deviations_found: number;
+  result: Record<string, unknown> | null;
+  review_decision: string | null;
+  review_notes: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchDeviationRuns(limit = 20, status?: string): Promise<DeviationRun[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (status) params.set("status", status);
+  const res = await fetch(`${API_BASE}/api/deviation/runs?${params}`);
+  if (!res.ok) throw new Error(`Deviation runs request failed: ${res.status}`);
+  return res.json();
+}
+
+export async function submitDeviationReview(
+  runId: string,
+  decision: "approved" | "rejected",
+  editedSummary?: string,
+  notes?: string,
+): Promise<DeviationRun> {
+  const res = await fetch(`${API_BASE}/api/deviation/${runId}/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      decision,
+      edited_summary: editedSummary ?? null,
+      notes: notes ?? null,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { detail?: string }).detail ?? `Review failed: ${res.status}`);
+  }
+  return res.json();
+}

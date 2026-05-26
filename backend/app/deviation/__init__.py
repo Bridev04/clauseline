@@ -1,20 +1,22 @@
 """
-LangGraph deviation detection pipeline. Five nodes executed as a directed graph:
+LangGraph deviation detection pipeline. Six nodes executed as a directed graph:
 
-  Loader       — fetches contract chunks and playbook rules from Postgres
-  Classifier   — parallel fan-out per CUAD category (Haiku); labels each clause
-                 as Conforming / Deviating / Unclear
-  Comparator   — parallel fan-out per deviating/unclear rule (Sonnet); produces
-                 a structured comparison with evidence text and deviation type
-  Scorer       — deterministic aggregation of per-rule scores into an overall
-                 deviation severity (High / Medium / Low / None)
-  Summarizer   — Sonnet drafts a plain-language deviation report for the reviewer
+  Loader         — fetches contract chunks and playbook rules from Postgres
+  Classifier     — parallel fan-out per CUAD category (Haiku); labels each clause
+                   as Conforming / Deviating / Unclear
+  Comparator     — parallel fan-out per deviating/unclear rule (Sonnet); produces
+                   a structured comparison with evidence text and deviation type
+  Scorer         — deterministic aggregation of per-rule scores into an overall
+                   deviation severity (High / Medium / Low / None)
+  Summarizer     — Sonnet drafts a plain-language deviation report for the reviewer
+  HITL Reviewer  — pauses via interrupt(); resumes when the reviewer submits a
+                   decision (approve/reject/edit). Week 6.
 
-A HITL interrupt fires after Summarizer; the reviewer approves, rejects, or edits
-before the result is committed. State uses `Annotated[list, add]` reducers on the
-fan-in edges so parallel node outputs merge cleanly.
+State uses `Annotated[list, add]` reducers on the fan-in edges so parallel
+node outputs merge cleanly.
 
-Implemented: Week 5 (pipeline), Week 6 (HITL + UI).
+Checkpoint storage: MemorySaver (in-process singleton). Not durable across
+server restarts. For production, swap to AsyncPostgresSaver.
 """
 from __future__ import annotations
 
@@ -27,7 +29,10 @@ from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
 import structlog
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command, interrupt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing_extensions import TypedDict
@@ -67,9 +72,13 @@ _CATEGORY_TO_DISPLAY: dict[str, str] = {
 # Severity precedence — lower index wins in aggregation
 _SEVERITY_ORDER: list[str] = ["critical", "high", "medium", "low", "info", "none"]
 
+# In-process checkpoint store. Not durable across restarts.
+_checkpointer = MemorySaver()
+
 
 class DeviationRunError(RuntimeError):
-    """Pipeline cannot proceed (missing contract/playbook, rule cap exceeded)."""
+    """Pipeline cannot proceed (missing contract/playbook, rule cap exceeded, or
+    checkpoint missing after a server restart)."""
     pass
 
 
@@ -414,12 +423,41 @@ async def _summarizer_node(state: DeviationState) -> dict[str, Any]:
     return {"summary": summary}
 
 
+async def _hitl_node(state: DeviationState) -> dict[str, Any]:
+    """Pause for human review. Resumes when Command(resume={...}) is invoked.
+
+    The interrupt payload exposes the AI-generated summary and score so the
+    reviewer can approve, reject, or supply an edited summary. The resume
+    value is a dict with optional keys:
+      - decision: "approved" | "rejected"
+      - edited_summary: str | None
+    """
+    response: Any = interrupt(
+        {
+            "summary": state.get("summary", ""),
+            "score": asdict(state["score"]),
+            "comparisons_count": len(state.get("comparisons") or []),
+        }
+    )
+    edited_summary: str | None = None
+    if isinstance(response, dict):
+        edited_summary = response.get("edited_summary")
+
+    final_summary = edited_summary if edited_summary else state.get("summary", "")
+    log.info("deviation.hitl.resumed", has_edit=bool(edited_summary))
+    return {"summary": final_summary}
+
+
 # ---------------------------------------------------------------------------
 # Graph construction and entry point
 # ---------------------------------------------------------------------------
 
 def _build_graph(session: AsyncSession) -> Any:
-    """Compile the LangGraph deviation pipeline for a single run."""
+    """Compile the LangGraph deviation pipeline for a single run.
+
+    The graph pauses at the hitl_reviewer node. Resume via
+    resume_deviation_pipeline() after the reviewer submits a decision.
+    """
 
     async def loader(state: DeviationState) -> dict[str, Any]:
         return await _loader_node(state, session)
@@ -430,23 +468,41 @@ def _build_graph(session: AsyncSession) -> Any:
     builder.add_node("comparator", _comparator_node)
     builder.add_node("scorer", _scorer_node)
     builder.add_node("summarizer", _summarizer_node)
+    builder.add_node("hitl_reviewer", _hitl_node)
 
     builder.add_edge(START, "loader")
     builder.add_edge("loader", "classifier")
     builder.add_edge("classifier", "comparator")
     builder.add_edge("comparator", "scorer")
     builder.add_edge("scorer", "summarizer")
-    builder.add_edge("summarizer", END)
+    builder.add_edge("summarizer", "hitl_reviewer")
+    builder.add_edge("hitl_reviewer", END)
 
-    return builder.compile()
+    return builder.compile(checkpointer=_checkpointer)
+
+
+def _state_to_report(state: DeviationState) -> DeviationReport:
+    return DeviationReport(
+        contract_id=state["contract_id"],
+        playbook_id=state["playbook_id"],
+        classifications=state.get("classifications") or [],
+        comparisons=state.get("comparisons") or [],
+        score=state["score"],
+        summary=state.get("summary") or "",
+    )
 
 
 async def run_deviation_pipeline(
     contract_id: str,
     playbook_id: str,
     session: AsyncSession,
+    run_id: str,
 ) -> DeviationReport:
-    """Run the 5-node deviation pipeline and return a structured report.
+    """Run the pipeline up to the HITL interrupt and return the partial report.
+
+    The graph pauses at hitl_reviewer. The partial result (score, comparisons,
+    summary) is available immediately. Call resume_deviation_pipeline() after
+    the reviewer submits a decision to finalise.
 
     Raises:
         DeviationRunError: Contract/playbook not found, or rule count exceeds MAX_RULES.
@@ -454,27 +510,68 @@ async def run_deviation_pipeline(
     log.info("deviation.pipeline.start", contract_id=contract_id, playbook_id=playbook_id)
 
     graph = _build_graph(session)
+    config: RunnableConfig = {"configurable": {"thread_id": run_id}}
+
     final_state: DeviationState = await graph.ainvoke(
         {
             "contract_id": contract_id,
             "playbook_id": playbook_id,
             "classifications": [],
             "comparisons": [],
-        }
+        },
+        config=config,
     )
 
-    report = DeviationReport(
+    report = _state_to_report(final_state)
+    log.info(
+        "deviation.pipeline.awaiting_review",
         contract_id=contract_id,
-        playbook_id=playbook_id,
-        classifications=final_state.get("classifications") or [],
-        comparisons=final_state.get("comparisons") or [],
-        score=final_state["score"],
-        summary=final_state.get("summary") or "",
+        overall_severity=report.score.overall_severity,
+        deviations=len(report.comparisons),
+        run_id=run_id,
+    )
+    return report
+
+
+async def resume_deviation_pipeline(
+    run_id: str,
+    decision: str,
+    edited_summary: str | None,
+    session: AsyncSession,
+) -> DeviationReport:
+    """Resume a paused pipeline after HITL review and return the final report.
+
+    Raises:
+        DeviationRunError: If the checkpoint is missing (e.g. server restarted
+            since the pipeline was initially run).
+    """
+    config: RunnableConfig = {"configurable": {"thread_id": run_id}}
+
+    # Verify checkpoint exists before attempting resume
+    checkpoint = await _checkpointer.aget(config)
+    if checkpoint is None:
+        raise DeviationRunError(
+            f"No checkpoint found for run_id={run_id}. "
+            "The server may have restarted since this run was created. "
+            "Please re-run the deviation pipeline."
+        )
+
+    graph = _build_graph(session)
+    resume_value: dict[str, Any] = {
+        "decision": decision,
+        "edited_summary": edited_summary,
+    }
+
+    final_state: DeviationState = await graph.ainvoke(
+        Command(resume=resume_value),
+        config=config,
     )
 
+    report = _state_to_report(final_state)
     log.info(
         "deviation.pipeline.done",
-        contract_id=contract_id,
+        run_id=run_id,
+        decision=decision,
         overall_severity=report.score.overall_severity,
         deviations=len(report.comparisons),
     )
