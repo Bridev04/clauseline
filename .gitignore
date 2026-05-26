@@ -71,3 +71,4 @@ docker/volumes/
 .DS_Store
 .AppleDouble
 .LSOverride
+data/sample_contract_test.pdf
