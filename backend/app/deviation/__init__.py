@@ -30,7 +30,7 @@ from typing import Annotated, Any, Literal, cast
 
 import structlog
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from sqlalchemy import select
@@ -71,10 +71,6 @@ _CATEGORY_TO_DISPLAY: dict[str, str] = {
 
 # Severity precedence — lower index wins in aggregation
 _SEVERITY_ORDER: list[str] = ["critical", "high", "medium", "low", "info", "none"]
-
-# In-process checkpoint store. Not durable across restarts.
-_checkpointer = MemorySaver()
-
 
 class DeviationRunError(RuntimeError):
     """Pipeline cannot proceed (missing contract/playbook, rule cap exceeded, or
@@ -452,12 +448,8 @@ async def _hitl_node(state: DeviationState) -> dict[str, Any]:
 # Graph construction and entry point
 # ---------------------------------------------------------------------------
 
-def _build_graph(session: AsyncSession) -> Any:
-    """Compile the LangGraph deviation pipeline for a single run.
-
-    The graph pauses at the hitl_reviewer node. Resume via
-    resume_deviation_pipeline() after the reviewer submits a decision.
-    """
+def _build_graph(session: AsyncSession, checkpointer: BaseCheckpointSaver[Any]) -> Any:
+    """Compile the LangGraph deviation pipeline for a single run."""
 
     async def loader(state: DeviationState) -> dict[str, Any]:
         return await _loader_node(state, session)
@@ -478,7 +470,7 @@ def _build_graph(session: AsyncSession) -> Any:
     builder.add_edge("summarizer", "hitl_reviewer")
     builder.add_edge("hitl_reviewer", END)
 
-    return builder.compile(checkpointer=_checkpointer)
+    return builder.compile(checkpointer=checkpointer)
 
 
 def _state_to_report(state: DeviationState) -> DeviationReport:
@@ -497,6 +489,7 @@ async def run_deviation_pipeline(
     playbook_id: str,
     session: AsyncSession,
     run_id: str,
+    checkpointer: BaseCheckpointSaver[Any],
 ) -> DeviationReport:
     """Run the pipeline up to the HITL interrupt and return the partial report.
 
@@ -509,7 +502,7 @@ async def run_deviation_pipeline(
     """
     log.info("deviation.pipeline.start", contract_id=contract_id, playbook_id=playbook_id)
 
-    graph = _build_graph(session)
+    graph = _build_graph(session, checkpointer)
     config: RunnableConfig = {"configurable": {"thread_id": run_id}}
 
     final_state: DeviationState = await graph.ainvoke(
@@ -538,25 +531,23 @@ async def resume_deviation_pipeline(
     decision: str,
     edited_summary: str | None,
     session: AsyncSession,
+    checkpointer: BaseCheckpointSaver[Any],
 ) -> DeviationReport:
     """Resume a paused pipeline after HITL review and return the final report.
 
     Raises:
-        DeviationRunError: If the checkpoint is missing (e.g. server restarted
-            since the pipeline was initially run).
+        DeviationRunError: If the run_id is unknown (never started or already completed).
     """
     config: RunnableConfig = {"configurable": {"thread_id": run_id}}
 
-    # Verify checkpoint exists before attempting resume
-    checkpoint = await _checkpointer.aget(config)
+    checkpoint = await checkpointer.aget(config)
     if checkpoint is None:
         raise DeviationRunError(
             f"No checkpoint found for run_id={run_id}. "
-            "The server may have restarted since this run was created. "
-            "Please re-run the deviation pipeline."
+            "This run may never have started or was already completed."
         )
 
-    graph = _build_graph(session)
+    graph = _build_graph(session, checkpointer)
     resume_value: dict[str, Any] = {
         "decision": decision,
         "edited_summary": edited_summary,

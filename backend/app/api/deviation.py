@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -92,6 +92,7 @@ def _run_to_response(run: DeviationRun) -> DeviationRunResponse:
 @router.post("/run", response_model=DeviationRunResponse)
 async def run_deviation(
     req: DeviationRunRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> DeviationRunResponse:
     """Run the LangGraph deviation pipeline. Pauses at HITL; returns awaiting_review."""
@@ -129,9 +130,10 @@ async def run_deviation(
         playbook_id=req.playbook_id,
     )
 
+    checkpointer = request.app.state.deviation_checkpointer
     try:
         report: DeviationReport = await run_deviation_pipeline(
-            req.contract_id, req.playbook_id, session, run.id
+            req.contract_id, req.playbook_id, session, run.id, checkpointer
         )
         # Pipeline paused at HITL interrupt; partial result is available.
         run.status = DeviationRunStatus.awaiting_review
@@ -201,6 +203,7 @@ async def get_run(
 async def submit_review(
     run_id: str,
     req: ReviewRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> DeviationRunResponse:
     """Submit a HITL review decision for a deviation run.
@@ -225,12 +228,14 @@ async def submit_review(
         has_edit=bool(req.edited_summary),
     )
 
+    checkpointer = request.app.state.deviation_checkpointer
     try:
         report: DeviationReport = await resume_deviation_pipeline(
             run_id=run_id,
             decision=req.decision,
             edited_summary=req.edited_summary,
             session=session,
+            checkpointer=checkpointer,
         )
     except DeviationRunError as exc:
         log.warning("deviation.review.resume_failed", run_id=run_id, error=str(exc))

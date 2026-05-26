@@ -9,7 +9,7 @@ QA with citations, and a deviation-detection pipeline. Frontend scaffolded in We
 
 ## Current state
 
-**Phase: Week 6 complete** (as of 2026-05-26)
+**Phase: Week 7 complete** (as of 2026-05-26)
 
 All 5 pre-Week-1 validation spikes are done (see `docs/spikes/`).
 Week 1: parse → chunk → embed → store pipeline.
@@ -18,6 +18,7 @@ Week 3: QA endpoint with citation grounding, eval harness + JSONL store, evals A
 Week 4: playbook YAML loader (Pydantic v2 schema), /evals/experiments endpoint, TabExperiments frontend.
 Week 5: LangGraph deviation pipeline (5-node), deviation_runs DB table + migration, POST /deviation/run + GET /deviation/runs/{id}.
 Week 6: HITL interrupt (6th LangGraph node + MemorySaver + Command resume), POST /deviation/{id}/review, GET /deviation/runs list, eval CI gate script + GET /evals/ci-gate, TabDeviation frontend (5th tab with inline review panel).
+Week 7: AsyncPostgresSaver (durable deviation checkpoints), GET /api/playbooks/, upload + deviation-launch UI in frontend, eval CI gate wired into GitHub Actions, CORS from settings.
 
 ### What's built and working
 
@@ -56,6 +57,10 @@ Week 6: HITL interrupt (6th LangGraph node + MemorySaver + Command resume), POST
 | Evals API | `backend/app/api/evals.py` | ✅ GET /summary, /failures, /experiments, /ci-gate |
 | Migration | `backend/migrations/versions/0003_hitl_review.py` | ✅ awaiting_review enum value + review_decision/notes/reviewed_at columns |
 | TabDeviation | `frontend/src/components/evals/TabDeviation.tsx` | ✅ runs table + inline HITL review panel (Approve/Reject) |
+| Deviation checkpointer | `backend/app/deviation/__init__.py` | ✅ AsyncPostgresSaver (durable, injected via lifespan) |
+| Playbooks API | `backend/app/api/playbooks.py` | ✅ GET /api/playbooks/ — metadata list |
+| Upload UI | `frontend/src/components/UploadContract.tsx` | ✅ PDF upload card, invalidates contracts query |
+| Deviation launcher | `frontend/src/components/DeviationLauncher.tsx` | ✅ contract + playbook picker, starts deviation run |
 
 ### What's still a stub
 
@@ -113,14 +118,14 @@ Health check: `curl http://localhost:8000/health`
 ```bash
 cd backend
 uv run ruff check .
-uv run mypy app          # 25 source files, 0 errors expected
+uv run mypy app          # 0 errors expected
 
 cd ../frontend
 npx tsc --noEmit         # 0 errors expected
 npm run build            # next build must compile cleanly
 ```
 
-All four checks are expected to pass with 0 errors/warnings as of Week 4.
+All four checks are expected to pass with 0 errors/warnings as of Week 7.
 
 ---
 
@@ -167,7 +172,7 @@ cd backend && uv run alembic upgrade head
 
 - **Single Postgres** (ParadeDB) for vectors + BM25 + relational — no separate vector DB
 - **RRF k=60** fusing top-20 dense + top-20 sparse results — validated in Spike 5
-- **LangGraph** scoped only to the deviation pipeline (6-node graph with HITL interrupt) — NOT used for QA. MemorySaver checkpointer is in-process only; not durable across restarts (swap to AsyncPostgresSaver for production).
+- **LangGraph** scoped only to the deviation pipeline (6-node graph with HITL interrupt) — NOT used for QA. `AsyncPostgresSaver` (Week 7) persists checkpoints in `checkpoint_*` tables; injected via `app.state` at lifespan startup.
 - **PyMuPDF** (not LlamaParse) as primary parser — bboxes needed for citation containment
 - **Cohere rerank-3** — Week 2, after fused retrieval, top-8 passed to LLM
 
@@ -192,3 +197,4 @@ Baseline: CUAD paper RoBERTa-large F1 (see `docs/spikes/spike-3-contracteval-ove
 | W4 | ✅ playbook YAML loader, experiment tracking |
 | W5 | ✅ LangGraph deviation pipeline (5-node), deviation_runs table, POST /deviation/run |
 | W6 | ✅ HITL interrupt (6th node + MemorySaver), POST /review, eval CI gate script + API endpoint, TabDeviation UI |
+| W7 | ✅ AsyncPostgresSaver (durable checkpoints), GET /api/playbooks/, upload + deviation-launch UI, CI gate in Actions |

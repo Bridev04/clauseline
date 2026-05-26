@@ -39,4 +39,8 @@ jobs:
         run: uv run pytest --cov=app --cov-report=term-missing
         # NOTE: integration and eval tests are excluded by default.
         # - integration tests require a live Postgres instance (add a service container when needed)
-        # - eval tests use the --run-evals flag and the eval gate; that gate lands Week 6
+        # - eval tests use the --run-evals flag and the eval gate; see ci_gate.py
+
+      - name: Eval CI gate
+        run: uv run python ../evals/scripts/ci_gate.py
+        # Exits 0 (SKIP) until 3+ committed run files exist in evals/results/.

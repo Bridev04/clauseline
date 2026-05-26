@@ -31,7 +31,10 @@ dependencies = [
 
     # Agentic (deviation pipeline only)
     "langgraph>=0.2.0",
+    "langgraph-checkpoint-postgres>=2.0.0",
     "langchain-core>=0.3.0",
+    # psycopg v3 required by AsyncPostgresSaver (different driver from asyncpg)
+    "psycopg[binary]>=3.2.0",
 
     # PDF parsing
     "pymupdf>=1.24.0",
@@ -106,6 +109,7 @@ module = [
     "llama_parse.*",
     "fitz.*",
     "yaml",
+    "langgraph.checkpoint.postgres.*",
 ]
 ignore_missing_imports = true
 

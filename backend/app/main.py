@@ -3,8 +3,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-from app.api import contracts, deviation, evals, qa
+from app.api import contracts, deviation, evals, playbooks, qa
 from app.config import get_settings
 
 
@@ -24,7 +25,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     get_llm_client(settings)
     get_rerank_client(settings)
 
-    yield
+    # Derive a psycopg-compatible DSN (strips the +asyncpg SQLAlchemy driver prefix)
+    checkpoint_dsn = settings.database_url.replace("+asyncpg", "", 1)
+    async with AsyncPostgresSaver.from_conn_string(checkpoint_dsn) as checkpointer:
+        await checkpointer.setup()
+        app.state.deviation_checkpointer = checkpointer
+
+        yield
 
     obs.flush()
     await engine.dispose()
@@ -44,7 +51,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],  # tighten in production
+        allow_origins=settings.cors_allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -54,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(qa.router, prefix="/api/qa", tags=["qa"])
     app.include_router(deviation.router, prefix="/api/deviation", tags=["deviation"])
     app.include_router(evals.router, prefix="/api/evals", tags=["evals"])
+    app.include_router(playbooks.router, prefix="/api/playbooks", tags=["playbooks"])
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

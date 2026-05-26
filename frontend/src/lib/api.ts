@@ -131,6 +131,50 @@ export interface DeviationRun {
   updated_at: string;
 }
 
+export interface PlaybookSummary {
+  id: string;
+  name: string;
+  version: string;
+  description: string | null;
+  rule_count: number;
+}
+
+export async function fetchPlaybooks(): Promise<PlaybookSummary[]> {
+  const res = await fetch(`${API_BASE}/api/playbooks/`);
+  if (!res.ok) throw new Error(`Playbooks request failed: ${res.status}`);
+  return res.json();
+}
+
+export async function uploadContract(file: File): Promise<{ id: string; filename: string; status: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/contracts/upload`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { detail?: string }).detail ?? `Upload failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function startDeviationRun(
+  contractId: string,
+  playbookId: string,
+): Promise<DeviationRun> {
+  const res = await fetch(`${API_BASE}/api/deviation/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contract_id: contractId, playbook_id: playbookId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { detail?: string }).detail ?? `Deviation run failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchDeviationRuns(limit = 20, status?: string): Promise<DeviationRun[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (status) params.set("status", status);

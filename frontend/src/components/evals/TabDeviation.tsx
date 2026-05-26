@@ -8,6 +8,8 @@ import {
   fetchDeviationRuns,
   submitDeviationReview,
 } from "@/lib/api";
+import { DeviationLauncher } from "@/components/DeviationLauncher";
+import { UploadContract } from "@/components/UploadContract";
 
 const SEVERITY_COLORS: Record<string, string> = {
   critical: "text-red-600 bg-red-50",
@@ -207,23 +209,20 @@ export function TabDeviation() {
   if (error)
     return <p className="text-sm text-red-500">Failed to load deviation runs. Is the API running?</p>;
 
-  if (!displayRuns || displayRuns.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-8 text-center">
-        <p className="text-zinc-500 text-sm font-medium">No deviation runs yet</p>
-        <p className="text-zinc-400 text-xs mt-1">
-          Use{" "}
-          <code className="font-mono bg-zinc-100 px-1 rounded">POST /api/deviation/run</code> to
-          start a run.
-        </p>
-      </div>
-    );
-  }
-
-  const awaitingCount = displayRuns.filter((r) => r.status === "awaiting_review").length;
+  const awaitingCount = (displayRuns ?? []).filter((r) => r.status === "awaiting_review").length;
 
   return (
     <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Start a deviation run</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <UploadContract />
+          <DeviationLauncher />
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
@@ -234,14 +233,18 @@ export function TabDeviation() {
               </span>
             )}
           </CardTitle>
-          <p className="text-xs text-zinc-500">
-            {displayRuns.length} run{displayRuns.length !== 1 ? "s" : ""} — newest first. Runs in{" "}
-            <span className="font-medium text-amber-700">awaiting review</span> can be approved or
-            rejected inline.
-          </p>
+          {displayRuns && displayRuns.length > 0 ? (
+            <p className="text-xs text-zinc-500">
+              {displayRuns.length} run{displayRuns.length !== 1 ? "s" : ""} — newest first. Runs in{" "}
+              <span className="font-medium text-amber-700">awaiting review</span> can be approved or
+              rejected inline.
+            </p>
+          ) : (
+            <p className="text-xs text-zinc-400">No runs yet — start one above.</p>
+          )}
         </CardHeader>
         <CardContent className="space-y-2">
-          {displayRuns.map((run) => (
+          {(displayRuns ?? []).map((run) => (
             <RunRow key={run.run_id} run={run} onUpdated={handleUpdated} />
           ))}
         </CardContent>

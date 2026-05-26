@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrustPanel } from "@/components/TrustPanel";
+import { UploadContract } from "@/components/UploadContract";
 import { askQuestion, fetchContracts, type QAResponse } from "@/lib/api";
 
 export function TabLiveDemo() {
@@ -25,6 +26,15 @@ export function TabLiveDemo() {
 
   return (
     <div className="space-y-4 max-w-2xl">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Upload a contract</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <UploadContract onUploaded={(id) => setContractId(id)} />
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Ask a question</CardTitle>

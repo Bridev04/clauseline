@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     # App
     app_env: str = "development"
     log_level: str = "INFO"
+    cors_allowed_origins: list[str] = ["http://localhost:3000"]
 
     # Evals — paths relative to the working directory (backend/)
     evals_results_dir: str = "../evals/results"

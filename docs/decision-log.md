@@ -116,3 +116,31 @@ ADR-lite format. One entry per architectural decision. Each entry: **Decision / 
 **Why this one:** The deviation pipeline has genuine fan-out (parallel Classifier, parallel Comparator) and a required HITL interrupt before committing results. QA is: retrieve → rerank → generate → validate. No graph needed.
 
 **Reversibility:** High. The deviation pipeline is self-contained in `app/deviation/`.
+
+---
+
+## 009 — AsyncPostgresSaver for deviation checkpoints
+
+**Decision:** Replace the `MemorySaver` singleton with `AsyncPostgresSaver` (from `langgraph-checkpoint-postgres`) so deviation pipeline checkpoints survive server restarts.
+
+**Context:** `MemorySaver` was used through Week 6 as a known production gap — checkpoints lived only in-process. Any server restart between `POST /deviation/run` (HITL interrupt) and `POST /deviation/{id}/review` would lose the checkpoint, making the review endpoint raise `DeviationRunError`. With `AsyncPostgresSaver`, checkpoints persist in Postgres under `checkpoint_*` tables (managed by the saver's `setup()` method).
+
+**Tables created by `AsyncPostgresSaver.setup()` (idempotent):**
+- `checkpoint_migrations` — migration version tracking
+- `checkpoints` — one row per (thread_id, checkpoint_ns, checkpoint_id)
+- `checkpoint_blobs` — node output blobs
+- `checkpoint_writes` — pending write entries
+
+None of these names conflict with our tables (`contracts`, `chunks`, `deviation_runs`).
+
+**DSN:** The saver requires a standard `postgresql://` URL (psycopg v3 driver). We derive it by stripping the `+asyncpg` SQLAlchemy driver suffix from `database_url` at lifespan startup. This avoids adding a second env var for what is effectively the same connection.
+
+**Connection management:** `AsyncPostgresSaver.from_conn_string` is an async context manager that opens a single psycopg connection and closes it on exit. For this portfolio's traffic profile, a single connection is sufficient. A production deployment would swap this for a pool (psycopg_pool) or `AsyncPostgresSaver(conn=pool_conn)`.
+
+**Limitations:** Only runs that have already committed a checkpoint (i.e., reached the HITL interrupt) can be resumed after a restart. A run that crashes mid-pipeline is still lost — no crash recovery is promised.
+
+**Alternatives considered:** Keep `MemorySaver` and document the limitation — viable at portfolio scale but embarrassing as the only documented production gap. Use `AsyncPostgresSaver` with a dedicated pool — more correct, but over-engineered for current load; extractable later.
+
+**Why this one:** Closes the only documented production gap (`MemorySaver` loses runs on restart) with a single context manager in `lifespan`. The checkpointer is now passed through the call stack (`run_deviation_pipeline`, `resume_deviation_pipeline`) rather than held as a module-level singleton — easier to test and swap.
+
+**Reversibility:** Medium. Swap `AsyncPostgresSaver.from_conn_string(...)` back to `MemorySaver()` in `main.py` and update the two function signatures. The `checkpoint_*` tables remain in Postgres but are inert.
