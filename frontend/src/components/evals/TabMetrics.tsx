@@ -71,6 +71,11 @@ export function TabMetrics() {
         <MetricCard label="Citation recall" value={pct(data.containment_recall)} />
       </div>
 
+      <p className="text-xs text-zinc-400">
+        Latest run · {data.total_questions}-question hand-built golden set, 1 contract —
+        directional, not a benchmark. Cross-run trend on the Experiments tab.
+      </p>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Per-bucket breakdown</CardTitle>

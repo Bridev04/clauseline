@@ -1,11 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrustPanel } from "@/components/TrustPanel";
 import { UploadContract } from "@/components/UploadContract";
 import { askQuestion, fetchContracts, type QAResponse } from "@/lib/api";
+
+const SUGGESTED_QUESTIONS = [
+  "What is the governing law of this agreement?",
+  "What is the cap on liability in this agreement?",
+  "What indemnification obligations does each party have?",
+  "What are the anti-assignment provisions and what exceptions apply?",
+  "Who owns the intellectual property, and does ownership transfer to the licensee?",
+  "What is the arbitration venue and the governing arbitration rules?",
+];
 
 export function TabLiveDemo() {
   const [contractId, setContractId] = useState("");
@@ -16,6 +25,14 @@ export function TabLiveDemo() {
     queryKey: ["contracts"],
     queryFn: fetchContracts,
   });
+
+  // Auto-select the first ready contract so the demo is one click.
+  useEffect(() => {
+    if (!contractId && contracts && contracts.length > 0) {
+      const ready = contracts.find((c) => c.status === "ready") ?? contracts[0];
+      setContractId(ready.id);
+    }
+  }, [contracts, contractId]);
 
   const { mutate, isPending, error } = useMutation({
     mutationFn: () => askQuestion(contractId, question),
@@ -62,6 +79,19 @@ export function TabLiveDemo() {
           </div>
 
           <div>
+            <label className="block text-xs font-medium text-zinc-500 mb-1">Try a question</label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {SUGGESTED_QUESTIONS.map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setQuestion(q)}
+                  className="text-xs px-2 py-1 rounded-full border border-zinc-200 text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50 transition-colors"
+                >
+                  {q.length > 46 ? q.slice(0, 44) + "…" : q}
+                </button>
+              ))}
+            </div>
             <label className="block text-xs font-medium text-zinc-500 mb-1">Question</label>
             <textarea
               className="w-full rounded border border-zinc-300 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-zinc-400"

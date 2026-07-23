@@ -69,12 +69,23 @@ class FailureEntry(BaseModel):
 
 @router.get("/summary", response_model=EvalSummaryResponse)
 async def get_summary() -> EvalSummaryResponse:
-    """Headline metrics + per-bucket breakdown for the evals dashboard (Tab 1)."""
-    results = _load()
-    if not results:
+    """Headline metrics + per-bucket breakdown for the evals dashboard (Tab 1).
+
+    The headline reflects the *latest* run, not a blend of every run. Averaging
+    an older pre-fix run into the top-line metrics understates the current
+    system; the cross-run trend is what the /experiments endpoint is for.
+    """
+    all_results = _load()
+    if not all_results:
         raise HTTPException(status_code=404, detail="No eval results found. Run the eval harness first.")
 
-    run_ids = {r.run_id for r in results}
+    run_ids = {r.run_id for r in all_results}
+
+    by_run: dict[str, list[EvalResultEntry]] = {}
+    for r in all_results:
+        by_run.setdefault(r.run_id, []).append(r)
+    latest_run_id = max(by_run, key=lambda rid: min(e.timestamp for e in by_run[rid]))
+    results = by_run[latest_run_id]
 
     buckets: dict[str, list[EvalResultEntry]] = {}
     for r in results:

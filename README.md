@@ -4,6 +4,12 @@
 
 **Status:** Week 8 complete — hybrid retrieval, QA with citations, deviation detection, HITL review, and live eval metrics all working.
 
+> **Just want to see it run?** There's a zero-dependency **offline demo mode** — no
+> Docker, no API keys, one command. Run `.\demo.ps1` (Windows) or `./demo.sh`
+> (macOS/Linux) and open http://localhost:3000/evals. See [`DEMO.md`](DEMO.md) for
+> the 3-minute interview walkthrough. The full production stack (below) needs
+> Docker + three API keys.
+
 ---
 
 ## What this is
