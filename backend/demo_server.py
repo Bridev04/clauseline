@@ -21,6 +21,7 @@ Run:  python demo_server.py           (listens on http://localhost:8000)
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import uuid
@@ -403,10 +404,8 @@ def _load_results() -> list[dict]:
         for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line:
-                try:
+                with contextlib.suppress(json.JSONDecodeError):
                     entries.append(json.loads(line))
-                except json.JSONDecodeError:
-                    pass
     return entries
 
 
@@ -720,7 +719,7 @@ from the golden set.</p>
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
-    def log_message(self, fmt: str, *args) -> None:  # noqa: A003
+    def log_message(self, fmt: str, *args) -> None:
         print(f"  {self.command} {self.path.split('?')[0]}")
 
     # -- helpers -----------------------------------------------------------
@@ -760,13 +759,13 @@ class Handler(BaseHTTPRequestHandler):
             return {}
 
     # -- verbs -------------------------------------------------------------
-    def do_OPTIONS(self) -> None:  # noqa: N802
+    def do_OPTIONS(self) -> None:
         self.send_response(204)
         self._cors()
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         qs = parse_qs(parsed.query)
@@ -812,7 +811,7 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send_json({"__status__": 404, "detail": f"Not found: {path}"})
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         body = self._read_body()
@@ -863,7 +862,7 @@ def main() -> None:
     print(f"  Listening on   http://localhost:{PORT}")
     print(f"  API docs       http://localhost:{PORT}/docs")
     print(f"  Eval runs      {n_results} file(s) from {RESULTS_DIR.relative_to(REPO)}")
-    print(f"  Dashboard      http://localhost:3000/evals  (start the frontend)")
+    print("  Dashboard      http://localhost:3000/evals  (start the frontend)")
     print("  Ctrl+C to stop")
     print("=" * 64)
     try:
